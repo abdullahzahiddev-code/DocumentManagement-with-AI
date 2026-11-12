@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — DocuVault AI{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-row">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-subtitle" id="dashGreeting">Loading…</p>
+    </div>
+    <a href="/documents/upload/" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Upload Document</a>
+  </div>
+</div>
+
+<!-- Stat cards -->
+<div class="stats-grid" id="statsGrid">
+  <div class="loading-overlay" style="grid-column:1/-1"><div class="spinner"></div></div>
+</div>
+
+<!-- Two columns: recent docs + category chart -->
+<div class="grid-2 mb-6">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-clock-rotate-left" style="color:var(--primary)"></i> Recent Documents</span>
+      <a href="/documents/" class="btn btn-ghost btn-sm">View All</a>
+    </div>
+    <div id="recentList" style="padding:0">
+      <div class="loading-overlay"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fa-solid fa-chart-bar" style="color:var(--primary)"></i> By Category</span>
+    </div>
+    <div class="card-body" id="catChart">
+      <div class="loading-overlay"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Processing overview -->
+<div class="card mb-6">
+  <div class="card-header">
+    <span class="card-title"><i class="fa-solid fa-gears" style="color:var(--primary)"></i> Processing Overview</span>
+  </div>
+  <div class="card-body">
+    <div class="stats-grid" id="procStats" style="margin-bottom:0"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  const user = await getCurrentUser();
+  if (user) {
+    const h = new Date().getHours();
+    const greet = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+    document.getElementById('dashGreeting').textContent =
+      `Good ${greet}, ${user.first_name || user.username}! Here's your overview.`;
+  }
+  await Promise.all([loadStats(), loadRecent()]);
+});
+
+async function loadStats() {
+  const r = await API.dashboardStats();
+  if (!r || !r.ok) { document.getElementById('statsGrid').innerHTML = '<p class="text-muted">Failed to load.</p>'; return; }
+  const d = r.data;
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-icon blue"><i class="fa-solid fa-file-lines"></i></div>
+      <div><div class="stat-value">${d.total_documents}</div><div class="stat-label">Total Documents</div></div></div>
+    <div class="stat-card"><div class="stat-icon green"><i class="fa-solid fa-user-check"></i></div>
+      <div><div class="stat-value">${d.my_documents}</div><div class="stat-label">My Documents</div></div></div>
+    <div class="stat-card"><div class="stat-icon purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+      <div><div class="stat-value">${d.ai_summaries_generated}</div><div class="stat-label">AI Summaries</div></div></div>
+    <div class="stat-card"><div class="stat-icon amber"><i class="fa-solid fa-calendar-days"></i></div>
+      <div><div class="stat-value">${d.recent_uploads_30d}</div><div class="stat-label">Uploads (30d)</div></div></div>`;
+
+  const ps = d.processing_status;
+  document.getElementById('procStats').innerHTML = `
+    <div class="stat-card"><div class="stat-icon amber"><i class="fa-solid fa-clock"></i></div>
+      <div><div class="stat-value">${ps.pending}</div><div class="stat-label">Pending</div></div></div>
+    <div class="stat-card"><div class="stat-icon blue"><i class="fa-solid fa-spinner"></i></div>
+      <div><div class="stat-value">${ps.processing}</div><div class="stat-label">Processing</div></div></div>
+    <div class="stat-card"><div class="stat-icon green"><i class="fa-solid fa-check-circle"></i></div>
+      <div><div class="stat-value">${ps.completed}</div><div class="stat-label">Completed</div></div></div>
+    <div class="stat-card"><div class="stat-icon red"><i class="fa-solid fa-circle-xmark"></i></div>
+      <div><div class="stat-value">${ps.failed}</div><div class="stat-label">Failed</div></div></div>`;
+
+  const cats = d.documents_by_category || [];
+  const catDiv = document.getElementById('catChart');
+  if (!cats.length) {
+    catDiv.innerHTML = '<div class="empty-state" style="padding:24px"><i class="fa-solid fa-folder-open"></i><p>No categories yet.</p></div>';
+  } else {
+    const max = Math.max(...cats.map(c => c.count), 1);
+    catDiv.innerHTML = `<div class="bar-chart">${cats.map(c => `
+      <div class="bar-item">
+        <span class="bar-label" title="${escHtml(c.category__name||'Uncategorized')}">${escHtml(c.category__name||'Uncategorized')}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${Math.round(c.count/max*100)}%;background:${c.category__color||'var(--primary)'}"></div></div>
+        <span class="bar-count">${c.count}</span>
+      </div>`).join('')}</div>`;
+  }
+}
+
+async function loadRecent() {
+  const r = await API.recentDocuments(6);
+  const el = document.getElementById('recentList');
+  if (!r || !r.ok || !r.data.length) {
+    el.innerHTML = '<div class="empty-state"><i class="fa-solid fa-inbox"></i><h3>No documents yet</h3><p>Upload your first document.</p><a href="/documents/upload/" class="btn btn-primary btn-sm mt-3">Upload Now</a></div>';
+    return;
+  }
+  el.innerHTML = r.data.map(doc => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border-light);cursor:pointer"
+         onclick="window.location.href='/documents/${doc.id}/'">
+      <div class="file-icon ${fileIconClass(doc.file_type)}" style="width:32px;height:32px;font-size:.68rem">${fileIconLabel(doc.file_type)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.88rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(doc.title)}</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">${formatDate(doc.upload_date)}</div>
+      </div>
+      ${statusBadge(doc.processing_status)}
+    </div>`).join('');
+}
+</script>
+{% endblock %}

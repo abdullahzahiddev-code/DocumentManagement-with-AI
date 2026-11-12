@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Search — DocuVault AI{% endblock %}
+{% block nav_search %}active{% endblock %}
+{% block content %}
+<div class="search-hero">
+  <h2><i class="fa-solid fa-magnifying-glass"></i> Search Documents</h2>
+  <div class="search-hero-input">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <input type="text" id="searchInput" placeholder="Search titles, content, tags, summaries…" autofocus autocomplete="off">
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-body" style="padding:12px 16px">
+    <div class="filters-bar">
+      <select class="filter-select" id="searchCategory"><option value="">All Categories</option></select>
+      <select class="filter-select" id="searchType">
+        <option value="">All Types</option>
+        <option value="pdf">PDF</option><option value="docx">Word</option>
+        <option value="txt">Text</option><option value="png">PNG</option><option value="jpg">JPG</option>
+      </select>
+      <select class="filter-select" id="searchSort">
+        <option value="-upload_date">Newest</option>
+        <option value="upload_date">Oldest</option>
+        <option value="title">A–Z</option>
+        <option value="-title">Z–A</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div id="searchMeta" style="margin-bottom:12px;font-size:.85rem;color:var(--text-secondary)"></div>
+<div id="searchResults"></div>
+<div class="pagination" id="searchPagination"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let sPage = 1, sTotalPages = 1;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  await loadCategories();
+
+  const urlQ = new URLSearchParams(window.location.search).get('q');
+  if (urlQ) { document.getElementById('searchInput').value = urlQ; await doSearch(); }
+  else { document.getElementById('searchResults').innerHTML = '<div class="empty-state"><i class="fa-solid fa-magnifying-glass"></i><h3>Start searching</h3><p>Enter keywords to search across all your documents.</p></div>'; }
+
+  let debounce;
+  document.getElementById('searchInput').addEventListener('input', () => {
+    clearTimeout(debounce); debounce = setTimeout(() => { sPage = 1; doSearch(); }, 400);
+  });
+  ['searchCategory','searchType','searchSort'].forEach(id =>
+    document.getElementById(id).addEventListener('change', () => { sPage = 1; doSearch(); }));
+});
+
+async function loadCategories() {
+  const r = await API.listCategories();
+  if (!r || !r.ok) return;
+  const sel = document.getElementById('searchCategory');
+  const cats = Array.isArray(r.data) ? r.data : (r.data.results || []);
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); });
+}
+
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  const params = { page: sPage, q,
+    category: document.getElementById('searchCategory').value,
+    file_type: document.getElementById('searchType').value,
+    sort: document.getElementById('searchSort').value,
+  };
+  Object.keys(params).forEach(k => { if (!params[k]) delete params[k]; });
+
+  document.getElementById('searchResults').innerHTML =
+    '<div class="loading-overlay"><div class="spinner"></div><span class="loading-text">Searching…</span></div>';
+  document.getElementById('searchMeta').textContent = '';
+
+  const r = await API.search(params);
+  if (!r || !r.ok) {
+    document.getElementById('searchResults').innerHTML =
+      '<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><h3>Search failed</h3><p>Please try again.</p></div>';
+    return;
+  }
+  const d = r.data;
+  sTotalPages = d.total_pages || 1;
+  if (q) document.getElementById('searchMeta').textContent =
+    `${d.total} result${d.total !== 1 ? 's' : ''} for "${q}"`;
+
+  if (!d.results.length) {
+    document.getElementById('searchResults').innerHTML =
+      `<div class="empty-state"><i class="fa-solid fa-magnifying-glass"></i><h3>No results</h3><p>Try different keywords or remove filters.</p></div>`;
+    document.getElementById('searchPagination').innerHTML = ''; return;
+  }
+
+  document.getElementById('searchResults').innerHTML = d.results.map(doc => `
+    <div class="card mb-3" style="cursor:pointer" onclick="window.location.href='/documents/${doc.id}/'">
+      <div class="card-body">
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="file-icon ${fileIconClass(doc.file_type)}" style="flex-shrink:0">${fileIconLabel(doc.file_type)}</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-size:.95rem;font-weight:700">${escHtml(doc.title)}</span>
+              ${statusBadge(doc.processing_status)}
+              ${doc.category_name?`<span class="badge badge-secondary">${escHtml(doc.category_name)}</span>`:''}
+            </div>
+            ${doc.snippet?`<div class="snippet">${escHtml(doc.snippet)}</div>`:''}
+            <div style="margin-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              ${doc.tags&&doc.tags.length?`<div class="tag-list">${doc.tags.slice(0,4).map(t=>`<span class="tag-chip">${escHtml(t.name)}</span>`).join('')}</div>`:''}
+              <span class="text-muted text-sm"><i class="fa-regular fa-calendar"></i> ${formatDate(doc.upload_date)}</span>
+              <span class="text-muted text-sm">${doc.file_size_display||''}</span>
+            </div>
+          </div>
+          <a href="/documents/${doc.id}/" class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation()"><i class="fa-solid fa-arrow-right"></i></a>
+        </div>
+      </div>
+    </div>`).join('');
+
+  renderPagination();
+}
+
+function renderPagination() {
+  const el = document.getElementById('searchPagination');
+  if (sTotalPages <= 1) { el.innerHTML = ''; return; }
+  let h = `<button class="page-btn" ${sPage===1?'disabled':''} onclick="goS(${sPage-1})"><i class="fa-solid fa-chevron-left"></i></button>`;
+  for (let p=Math.max(1,sPage-2); p<=Math.min(sTotalPages,sPage+2); p++)
+    h += `<button class="page-btn ${p===sPage?'active':''}" onclick="goS(${p})">${p}</button>`;
+  h += `<button class="page-btn" ${sPage===sTotalPages?'disabled':''} onclick="goS(${sPage+1})"><i class="fa-solid fa-chevron-right"></i></button>`;
+  el.innerHTML = h;
+}
+function goS(p) { sPage = p; doSearch(); window.scrollTo(0,0); }
+</script>
+{% endblock %}

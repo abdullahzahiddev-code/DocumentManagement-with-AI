@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Documents — DocuVault AI{% endblock %}
+{% block nav_documents %}active{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-row">
+    <div>
+      <h1 class="page-title">Document Library</h1>
+      <p class="page-subtitle" id="docCount">Loading…</p>
+    </div>
+    <div class="flex gap-2">
+      <div class="view-toggle">
+        <button class="view-btn active" id="gridViewBtn" title="Grid"><i class="fa-solid fa-grip"></i></button>
+        <button class="view-btn" id="listViewBtn" title="List"><i class="fa-solid fa-list"></i></button>
+      </div>
+      <a href="/documents/upload/" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Upload</a>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+  <div class="card-body" style="padding:12px 16px">
+    <div class="filters-bar">
+      <select class="filter-select" id="filterCategory"><option value="">All Categories</option></select>
+      <select class="filter-select" id="filterType">
+        <option value="">All Types</option>
+        <option value="pdf">PDF</option><option value="docx">Word</option>
+        <option value="txt">Text</option><option value="png">PNG</option><option value="jpg">JPG</option>
+      </select>
+      <select class="filter-select" id="filterStatus">
+        <option value="">All Status</option>
+        <option value="pending">Pending</option><option value="processing">Processing</option>
+        <option value="completed">Completed</option><option value="failed">Failed</option>
+      </select>
+      <select class="filter-select" id="filterSort">
+        <option value="-upload_date">Newest First</option>
+        <option value="upload_date">Oldest First</option>
+        <option value="title">A–Z</option><option value="-title">Z–A</option>
+        <option value="-file_size">Largest</option>
+      </select>
+      <button class="btn btn-ghost btn-sm" id="clearFiltersBtn"><i class="fa-solid fa-xmark"></i> Clear</button>
+    </div>
+  </div>
+</div>
+
+<div id="docContainer">
+  <div class="loading-overlay"><div class="spinner"></div><span class="loading-text">Loading documents…</span></div>
+</div>
+<div class="pagination" id="pagination"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1, currentView = 'grid', totalPages = 1;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  await loadCategories();
+  await loadDocs();
+  initFilters();
+  initViewToggle();
+});
+
+async function loadCategories() {
+  const r = await API.listCategories();
+  if (!r || !r.ok) return;
+  const sel = document.getElementById('filterCategory');
+  const cats = Array.isArray(r.data) ? r.data : (r.data.results || []);
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); });
+}
+
+async function loadDocs() {
+  const params = {
+    page: currentPage,
+    file_type: document.getElementById('filterType').value,
+    status: document.getElementById('filterStatus').value,
+    ordering: document.getElementById('filterSort').value,
+  };
+  const cat = document.getElementById('filterCategory').value;
+  if (cat) params.category = cat;
+  Object.keys(params).forEach(k => { if (!params[k]) delete params[k]; });
+
+  document.getElementById('docContainer').innerHTML =
+    '<div class="loading-overlay"><div class="spinner"></div><span class="loading-text">Loading…</span></div>';
+
+  const r = await API.listDocuments(params);
+  if (!r || !r.ok) {
+    document.getElementById('docContainer').innerHTML =
+      '<div class="empty-state"><i class="fa-solid fa-triangle-exclamation"></i><h3>Failed to load</h3><p>Please try again.</p></div>';
+    return;
+  }
+
+  const docs  = Array.isArray(r.data) ? r.data : (r.data.results || []);
+  const count = r.data.count !== undefined ? r.data.count : docs.length;
+  totalPages  = r.data.total_pages || Math.ceil(count / 20) || 1;
+  document.getElementById('docCount').textContent = `${count} document${count !== 1 ? 's' : ''}`;
+
+  if (!docs.length) {
+    document.getElementById('docContainer').innerHTML =
+      '<div class="empty-state"><i class="fa-solid fa-folder-open"></i><h3>No documents found</h3><p>Upload a document or clear your filters.</p><a href="/documents/upload/" class="btn btn-primary mt-3">Upload Document</a></div>';
+    renderPagination(0); return;
+  }
+
+  if (currentView === 'grid') {
+    document.getElementById('docContainer').innerHTML = `<div class="doc-grid">${docs.map(buildDocCard).join('')}</div>`;
+  } else {
+    renderTable(docs);
+  }
+  renderPagination(count);
+}
+
+function renderTable(docs) {
+  document.getElementById('docContainer').innerHTML = `
+    <div class="card table-wrap">
+      <table>
+        <thead>
+          <tr><th>Document</th><th>Type</th><th>Category</th><th>Status</th><th>Size</th><th>Uploaded</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          ${docs.map(doc => `
+          <tr style="cursor:pointer" onclick="window.location.href='/documents/${doc.id}/'">
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="file-icon ${fileIconClass(doc.file_type)}" style="width:30px;height:30px;font-size:.65rem">${fileIconLabel(doc.file_type)}</div>
+                <div>
+                  <div style="font-weight:600;font-size:.88rem">${escHtml(doc.title)}</div>
+                  ${doc.owner_username ? `<div style="font-size:.75rem;color:var(--text-muted)">@${escHtml(doc.owner_username)}</div>` : ''}
+                </div>
+              </div>
+            </td>
+            <td><span class="badge badge-secondary">${(doc.file_type||'').toUpperCase()}</span></td>
+            <td>${doc.category_name ? escHtml(doc.category_name) : '<span class="text-muted">—</span>'}</td>
+            <td>${statusBadge(doc.processing_status)}</td>
+            <td style="font-size:.82rem">${doc.file_size_display||'—'}</td>
+            <td style="font-size:.82rem;color:var(--text-muted)">${formatDate(doc.upload_date)}</td>
+            <td onclick="event.stopPropagation()">
+              <div class="flex gap-2">
+                <a href="/documents/${doc.id}/" class="btn btn-ghost btn-sm btn-icon" title="View"><i class="fa-solid fa-eye"></i></a>
+                <button class="btn btn-ghost btn-sm btn-icon" title="Download" onclick="dlDoc(${doc.id}, event)"><i class="fa-solid fa-download"></i></button>
+                <button class="btn btn-ghost btn-sm btn-icon" style="color:var(--danger)" title="Delete" onclick="delDoc(${doc.id},'${escHtml(doc.title)}',event)"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderPagination(total) {
+  const el = document.getElementById('pagination');
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  let h = `<button class="page-btn" ${currentPage===1?'disabled':''} onclick="goPage(${currentPage-1})"><i class="fa-solid fa-chevron-left"></i></button>`;
+  for (let p = Math.max(1,currentPage-2); p <= Math.min(totalPages,currentPage+2); p++)
+    h += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+  h += `<button class="page-btn" ${currentPage===totalPages?'disabled':''} onclick="goPage(${currentPage+1})"><i class="fa-solid fa-chevron-right"></i></button>`;
+  el.innerHTML = h;
+}
+function goPage(p) { currentPage = p; loadDocs(); window.scrollTo(0,0); }
+
+function initFilters() {
+  ['filterCategory','filterType','filterStatus','filterSort'].forEach(id =>
+    document.getElementById(id).addEventListener('change', () => { currentPage = 1; loadDocs(); }));
+  document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+    ['filterCategory','filterType','filterStatus'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('filterSort').value = '-upload_date';
+    currentPage = 1; loadDocs();
+  });
+}
+
+function initViewToggle() {
+  document.getElementById('gridViewBtn').addEventListener('click', () => {
+    currentView = 'grid';
+    document.getElementById('gridViewBtn').classList.add('active');
+    document.getElementById('listViewBtn').classList.remove('active');
+    loadDocs();
+  });
+  document.getElementById('listViewBtn').addEventListener('click', () => {
+    currentView = 'list';
+    document.getElementById('listViewBtn').classList.add('active');
+    document.getElementById('gridViewBtn').classList.remove('active');
+    loadDocs();
+  });
+}
+
+async function dlDoc(id, event) {
+  event.stopPropagation();
+  Toast.info('Downloading…', '');
+  const res = await API.downloadDocument(id);
+  if (!res || !res.ok) { Toast.error('Download failed', ''); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = ''; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function delDoc(id, title, event) {
+  event.stopPropagation();
+  Confirm.show('Delete Document', `Delete "${title}"? This cannot be undone.`, async () => {
+    const r = await API.deleteDocument(id);
+    if (r.ok) { Toast.success('Deleted', `"${title}" removed.`); await loadDocs(); }
+    else Toast.error('Delete failed', '');
+  });
+}
+</script>
+{% endblock %}

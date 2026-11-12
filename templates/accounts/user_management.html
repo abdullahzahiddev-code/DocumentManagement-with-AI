@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}User Management — DocuVault AI{% endblock %}
+{% block nav_users %}active{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div class="page-header-row">
+    <div>
+      <h1 class="page-title">User Management</h1>
+      <p class="page-subtitle">View and manage platform users</p>
+    </div>
+    <span class="badge badge-primary" id="userCount">—</span>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>User</th><th>Email</th><th>Role</th><th>Department</th><th>Joined</th><th>Status</th></tr>
+      </thead>
+      <tbody id="usersTable">
+        <tr><td colspan="6"><div class="loading-overlay"><div class="spinner"></div></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  const user = await getCurrentUser();
+  if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+    Toast.error('Access denied', 'Managers and Admins only.');
+    setTimeout(() => window.location.href = '/dashboard/', 1500);
+    return;
+  }
+  await loadUsers();
+});
+
+async function loadUsers() {
+  const r = await API.listUsers();
+  const tbody = document.getElementById('usersTable');
+  if (!r || !r.ok) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:32px">Failed to load users.</td></tr>';
+    return;
+  }
+  const users = Array.isArray(r.data) ? r.data : (r.data.results || []);
+  document.getElementById('userCount').textContent = users.length + ' users';
+  const roles = { admin:'badge-danger', manager:'badge-warning', employee:'badge-primary' };
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="user-avatar" style="background:var(--primary)">${(u.first_name||u.username||'U')[0].toUpperCase()}</div>
+          <div>
+            <div style="font-weight:600">${escHtml(u.first_name||'')} ${escHtml(u.last_name||'')}</div>
+            <div style="font-size:.75rem;color:var(--text-muted)">@${escHtml(u.username)}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-size:.85rem">${escHtml(u.email||'—')}</td>
+      <td><span class="badge ${roles[u.role]||'badge-secondary'}">${u.role}</span></td>
+      <td style="font-size:.85rem">${escHtml(u.department||'—')}</td>
+      <td style="font-size:.82rem;color:var(--text-muted)">${formatDate(u.date_joined)}</td>
+      <td>${u.is_active?'<span class="badge badge-success">Active</span>':'<span class="badge badge-danger">Inactive</span>'}</td>
+    </tr>`).join('');
+}
+</script>
+{% endblock %}

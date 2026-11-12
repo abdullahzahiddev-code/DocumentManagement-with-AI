@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Profile — DocuVault AI{% endblock %}
+{% block nav_profile %}active{% endblock %}
+{% block content %}
+<div class="page-header"><h1 class="page-title">My Profile</h1></div>
+
+<div class="grid-2">
+  <!-- Edit form -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Profile Details</span></div>
+    <div class="card-body">
+      <div class="text-center mb-4">
+        <div class="profile-avatar-large" id="profileAvatar">U</div>
+        <h3 style="font-size:1.1rem;font-weight:700" id="profileName">Loading…</h3>
+        <span class="badge mt-2" id="profileRole">—</span>
+      </div>
+      <form id="profileForm" novalidate>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">First Name</label>
+            <input type="text" id="first_name" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last Name</label>
+            <input type="text" id="last_name" class="form-control">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="email" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input type="text" id="phone" class="form-control" placeholder="+1 (555) 000-0000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Department</label>
+          <input type="text" id="department" class="form-control" placeholder="Your department">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bio</label>
+          <textarea id="bio" class="form-control" placeholder="A short bio…"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" id="saveBtn">
+          <i class="fa-solid fa-floppy-disk"></i> Save Changes
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Right sidebar -->
+  <div>
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title">Account Info</span></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:14px">
+        <div><div class="text-muted text-sm">Username</div><div style="font-weight:600" id="infoUsername">—</div></div>
+        <div><div class="text-muted text-sm">Role</div><div id="infoRole">—</div></div>
+        <div><div class="text-muted text-sm">Member Since</div><div style="font-weight:600" id="infoJoined">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">My Statistics</span></div>
+      <div class="card-body" id="myStats">
+        <div class="loading-overlay"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  const user = await getCurrentUser(true);
+  if (!user) return;
+
+  const roles = { admin:'badge-danger', manager:'badge-warning', employee:'badge-primary' };
+  document.getElementById('profileAvatar').textContent = (user.first_name||user.username||'U')[0].toUpperCase();
+  document.getElementById('profileName').textContent = `${user.first_name||''} ${user.last_name||''}`.trim() || user.username;
+  document.getElementById('profileRole').className = `badge ${roles[user.role]||'badge-secondary'} mt-2`;
+  document.getElementById('profileRole').textContent = user.role;
+  document.getElementById('infoUsername').textContent = '@' + user.username;
+  document.getElementById('infoRole').innerHTML = `<span class="badge ${roles[user.role]||'badge-secondary'}">${user.role}</span>`;
+  document.getElementById('infoJoined').textContent = formatDate(user.date_joined);
+
+  ['first_name','last_name','email','phone','department','bio'].forEach(f => {
+    const el = document.getElementById(f); if (el) el.value = user[f] || '';
+  });
+
+  await loadStats();
+
+  document.getElementById('profileForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('saveBtn');
+    setLoading(btn, true, 'Saving…');
+    const payload = {};
+    ['first_name','last_name','email','phone','department','bio'].forEach(f => {
+      payload[f] = document.getElementById(f).value.trim();
+    });
+    const r = await API.updateProfile(payload);
+    setLoading(btn, false);
+    if (r && r.ok) {
+      localStorage.setItem('current_user', JSON.stringify(r.data));
+      Toast.success('Profile updated!', '');
+      hydrateSidebar();
+    } else {
+      Toast.error('Update failed', r?.data?.detail || 'Please check your input.');
+    }
+  });
+});
+
+async function loadStats() {
+  const r = await API.dashboardStats();
+  const el = document.getElementById('myStats');
+  if (!r || !r.ok) { el.innerHTML = '<p class="text-muted">Failed to load.</p>'; return; }
+  const d = r.data;
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="flex" style="justify-content:space-between"><span class="text-muted text-sm">My Documents</span><strong>${d.my_documents}</strong></div>
+      <div class="flex" style="justify-content:space-between"><span class="text-muted text-sm">AI Summaries</span><strong>${d.ai_summaries_generated}</strong></div>
+      <div class="flex" style="justify-content:space-between"><span class="text-muted text-sm">Uploads (30d)</span><strong>${d.recent_uploads_30d}</strong></div>
+      <div class="flex" style="justify-content:space-between"><span class="text-muted text-sm">Processing Failures</span><strong style="color:var(--danger)">${d.processing_status.failed}</strong></div>
+    </div>`;
+}
+</script>
+{% endblock %}

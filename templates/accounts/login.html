@@ -1,0 +1,68 @@
+{% extends "base_auth.html" %}
+{% block title %}Login — DocuVault AI{% endblock %}
+{% block content %}
+<h2 class="auth-title">Welcome back</h2>
+<p class="auth-subtitle">Sign in to your DocuVault account</p>
+<form id="loginForm" novalidate>
+  <div class="form-group">
+    <label class="form-label" for="username">Username <span class="required">*</span></label>
+    <input type="text" id="username" class="form-control" placeholder="Your username" autocomplete="username">
+    <div class="form-error" id="usernameError"></div>
+  </div>
+  <div class="form-group">
+    <label class="form-label" for="password">Password <span class="required">*</span></label>
+    <div style="position:relative">
+      <input type="password" id="password" class="form-control" placeholder="Your password" autocomplete="current-password">
+      <button type="button" id="togglePwd" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-muted)">
+        <i class="fa-regular fa-eye"></i>
+      </button>
+    </div>
+    <div class="form-error" id="passwordError"></div>
+  </div>
+  <div class="form-error" id="generalError" style="margin-bottom:12px"></div>
+  <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">
+    <i class="fa-solid fa-right-to-bracket"></i> Sign In
+  </button>
+</form>
+<div class="auth-footer">Don't have an account? <a href="/register/">Create one</a></div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  if (API.getToken()) { window.location.href = '/dashboard/'; return; }
+
+  document.getElementById('togglePwd').addEventListener('click', function () {
+    const inp = document.getElementById('password');
+    const vis = inp.type === 'password';
+    inp.type = vis ? 'text' : 'password';
+    this.innerHTML = vis ? '<i class="fa-regular fa-eye-slash"></i>' : '<i class="fa-regular fa-eye"></i>';
+  });
+
+  document.getElementById('loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    clearFormErrors(document.getElementById('loginForm'));
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    if (!username) { showFormError('username', 'Username is required.'); return; }
+    if (!password) { showFormError('password', 'Password is required.'); return; }
+
+    const btn = document.getElementById('loginBtn');
+    setLoading(btn, true, 'Signing in…');
+    const result = await API.login(username, password);
+    setLoading(btn, false);
+
+    if (result && result.ok) {
+      API.setTokens(result.data.tokens.access, result.data.tokens.refresh);
+      localStorage.setItem('current_user', JSON.stringify(result.data.user));
+      Toast.success('Welcome back!', `Hello, ${result.data.user.first_name || result.data.user.username}`);
+      setTimeout(() => window.location.href = '/dashboard/', 700);
+    } else {
+      const msg = result?.data?.error || result?.data?.detail || 'Invalid credentials.';
+      const errEl = document.getElementById('generalError');
+      errEl.textContent = msg;
+      errEl.classList.add('visible');
+    }
+  });
+});
+</script>
+{% endblock %}

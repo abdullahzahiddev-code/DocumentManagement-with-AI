@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Upload — DocuVault AI{% endblock %}
+{% block nav_upload %}active{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Upload Document</h1>
+  <p class="page-subtitle">Supported: PDF, DOCX, TXT, PNG, JPG · Max 10 MB</p>
+</div>
+
+<div class="grid-2">
+  <!-- Left: drop zone + form -->
+  <div>
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-cloud-arrow-up" style="color:var(--primary)"></i> Select File</span></div>
+      <div class="card-body">
+        <div class="upload-zone" id="uploadZone">
+          <i class="fa-solid fa-cloud-arrow-up"></i>
+          <h3>Drag &amp; drop here</h3>
+          <p>or click to browse from your device</p>
+          <button type="button" class="btn btn-primary btn-sm mt-3" id="browseBtn">
+            <i class="fa-solid fa-folder-open"></i> Browse File
+          </button>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.png,.jpg,.jpeg">
+
+        <!-- Selected file preview -->
+        <div id="selectedFile" style="display:none;margin-top:14px;padding:12px;background:var(--bg-body);border-radius:var(--radius-sm)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="file-icon" id="selIcon">?</div>
+            <div style="flex:1">
+              <div style="font-weight:600;font-size:.88rem" id="selName">—</div>
+              <div style="font-size:.78rem;color:var(--text-muted)" id="selSize">—</div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm btn-icon" id="clearFileBtn"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="upload-progress" id="uploadProgress" style="margin-top:12px">
+          <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">
+            <span id="progressName">Uploading…</span><span id="progressPct">0%</span>
+          </div>
+          <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Document Details</span></div>
+      <div class="card-body">
+        <form id="uploadForm" novalidate>
+          <div class="form-group">
+            <label class="form-label">Title <span class="required">*</span></label>
+            <input type="text" id="docTitle" class="form-control" placeholder="Document title">
+            <div class="form-error" id="titleError"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="docDesc" class="form-control" placeholder="Brief description…"></textarea>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select id="docCategory" class="form-control"><option value="">— Select —</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Access Level</label>
+              <select id="docAccess" class="form-control">
+                <option value="private">Private (only me)</option>
+                <option value="department">Department</option>
+                <option value="public">Public</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tags</label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="tagInput" class="form-control" placeholder="Type tag, press Enter…">
+              <button type="button" class="btn btn-secondary" id="addTagBtn"><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <div class="tag-list mt-2" id="tagList"></div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block btn-lg" id="uploadBtn" disabled>
+            <i class="fa-solid fa-cloud-arrow-up"></i> Upload Document
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: info panel -->
+  <div>
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title"><i class="fa-solid fa-circle-info" style="color:var(--primary)"></i> What happens next?</span></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;gap:12px">
+          <div class="stat-icon blue" style="width:36px;height:36px;font-size:.85rem;flex-shrink:0">1</div>
+          <div><strong>Text Extraction</strong><br><span class="text-muted text-sm">PyMuPDF / python-docx extract text automatically.</span></div>
+        </div>
+        <div style="display:flex;gap:12px">
+          <div class="stat-icon green" style="width:36px;height:36px;font-size:.85rem;flex-shrink:0">2</div>
+          <div><strong>OCR (if needed)</strong><br><span class="text-muted text-sm">Scanned PDFs and images use Tesseract OCR.</span></div>
+        </div>
+        <div style="display:flex;gap:12px">
+          <div class="stat-icon purple" style="width:36px;height:36px;font-size:.85rem;flex-shrink:0">3</div>
+          <div><strong>AI Summary</strong><br><span class="text-muted text-sm">Request AI summarization from the document page.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Allowed Types</span></div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px"><div class="file-icon pdf" style="width:30px;height:30px;font-size:.68rem">PDF</div><span class="text-sm">PDF Documents</span></div>
+        <div style="display:flex;align-items:center;gap:10px"><div class="file-icon docx" style="width:30px;height:30px;font-size:.68rem">DOC</div><span class="text-sm">Word Documents (.docx)</span></div>
+        <div style="display:flex;align-items:center;gap:10px"><div class="file-icon txt" style="width:30px;height:30px;font-size:.68rem">TXT</div><span class="text-sm">Plain Text Files</span></div>
+        <div style="display:flex;align-items:center;gap:10px"><div class="file-icon png" style="width:30px;height:30px;font-size:.68rem">IMG</div><span class="text-sm">Images (PNG, JPG)</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedFile = null, tags = [];
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!requireAuth()) return;
+  await loadCategories();
+  initDropZone();
+  initTagInput();
+  document.getElementById('uploadForm').addEventListener('submit', handleUpload);
+});
+
+async function loadCategories() {
+  const r = await API.listCategories();
+  if (!r || !r.ok) return;
+  const cats = Array.isArray(r.data) ? r.data : (r.data.results || []);
+  const sel = document.getElementById('docCategory');
+  cats.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); });
+}
+
+function initDropZone() {
+  const zone  = document.getElementById('uploadZone');
+  const inp   = document.getElementById('fileInput');
+  const browse = document.getElementById('browseBtn');
+  browse.addEventListener('click', e => { e.stopPropagation(); inp.click(); });
+  zone.addEventListener('click', () => inp.click());
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+  inp.addEventListener('change', () => { if (inp.files[0]) setFile(inp.files[0]); });
+  document.getElementById('clearFileBtn').addEventListener('click', clearFile);
+}
+
+function setFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const allowed = ['pdf','docx','txt','png','jpg','jpeg'];
+  if (!allowed.includes(ext)) { Toast.error('Invalid type', `Allowed: ${allowed.join(', ')}`); return; }
+  if (file.size > 10 * 1024 * 1024) { Toast.error('Too large', 'Max 10 MB'); return; }
+  selectedFile = file;
+  const cls = fileIconClass(ext); const lbl = fileIconLabel(ext);
+  const icon = document.getElementById('selIcon');
+  icon.className = `file-icon ${cls}`; icon.textContent = lbl;
+  document.getElementById('selName').textContent = file.name;
+  document.getElementById('selSize').textContent = formatSize(file.size);
+  document.getElementById('selectedFile').style.display = 'block';
+  document.getElementById('uploadBtn').disabled = false;
+  if (!document.getElementById('docTitle').value)
+    document.getElementById('docTitle').value = file.name.replace(/\.[^.]+$/, '');
+}
+
+function clearFile() {
+  selectedFile = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('selectedFile').style.display = 'none';
+  document.getElementById('uploadBtn').disabled = true;
+}
+
+function initTagInput() {
+  const inp = document.getElementById('tagInput');
+  const add = () => { const v = inp.value.trim().toLowerCase(); if (v && !tags.includes(v)) { tags.push(v); renderTags(); } inp.value = ''; };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  document.getElementById('addTagBtn').addEventListener('click', add);
+}
+function renderTags() {
+  document.getElementById('tagList').innerHTML = tags.map((t,i) =>
+    `<span class="tag-chip">${escHtml(t)}<button type="button" onclick="rmTag(${i})">×</button></span>`).join('');
+}
+function rmTag(i) { tags.splice(i,1); renderTags(); }
+
+async function handleUpload(e) {
+  e.preventDefault();
+  if (!selectedFile) { Toast.warning('No file', 'Select a file first.'); return; }
+  const title = document.getElementById('docTitle').value.trim();
+  if (!title) { showFormError('title', 'Title is required.'); return; }
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('title', title);
+  fd.append('description', document.getElementById('docDesc').value.trim());
+  const cat = document.getElementById('docCategory').value;
+  if (cat) fd.append('category', cat);
+  fd.append('access_level', document.getElementById('docAccess').value);
+  tags.forEach(t => fd.append('tag_names', t));
+
+  const btn = document.getElementById('uploadBtn');
+  setLoading(btn, true, 'Uploading…');
+  const prog = document.getElementById('uploadProgress');
+  prog.classList.add('visible');
+  document.getElementById('progressName').textContent = selectedFile.name;
+  let pct = 0;
+  const iv = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 18, 90);
+    document.getElementById('progressBar').style.width = pct + '%';
+    document.getElementById('progressPct').textContent = Math.round(pct) + '%';
+  }, 200);
+
+  const r = await API.uploadDocument(fd);
+  clearInterval(iv);
+  document.getElementById('progressBar').style.width = '100%';
+  document.getElementById('progressPct').textContent = '100%';
+  setLoading(btn, false);
+
+  if (r && r.ok) {
+    Toast.success('Uploaded!', `"${r.data.title}" queued for processing.`);
+    setTimeout(() => window.location.href = `/documents/${r.data.id}/`, 700);
+  } else {
+    prog.classList.remove('visible');
+    document.getElementById('progressBar').style.width = '0%';
+    const errs = r?.data || {};
+    if (typeof errs === 'object') {
+      Object.entries(errs).forEach(([f, msgs]) => Toast.error(`${f}`, Array.isArray(msgs)?msgs.join(' '):String(msgs)));
+    } else {
+      Toast.error('Upload failed', 'An unexpected error occurred.');
+    }
+  }
+}
+</script>
+{% endblock %}

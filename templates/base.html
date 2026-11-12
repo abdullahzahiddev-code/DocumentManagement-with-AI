@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}DocuVault AI{% endblock %}</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}app-body{% endblock %}">
+{% block full_page %}
+<div class="app-layout" id="appLayout">
+
+  <!-- ── Sidebar ──────────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <i class="fa-solid fa-vault"></i>
+        <span class="logo-text">DocuVault <span class="logo-ai">AI</span></span>
+      </div>
+      <button class="sidebar-toggle" id="sidebarToggle" title="Collapse sidebar">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <span class="nav-section-label">Main</span>
+        <a href="/dashboard/" class="nav-link {% block nav_dashboard %}{% endblock %}">
+          <i class="fa-solid fa-gauge-high"></i><span>Dashboard</span>
+        </a>
+        <a href="/documents/" class="nav-link {% block nav_documents %}{% endblock %}">
+          <i class="fa-solid fa-folder-open"></i><span>Documents</span>
+        </a>
+        <a href="/documents/upload/" class="nav-link {% block nav_upload %}{% endblock %}">
+          <i class="fa-solid fa-cloud-arrow-up"></i><span>Upload</span>
+        </a>
+        <a href="/search/" class="nav-link {% block nav_search %}{% endblock %}">
+          <i class="fa-solid fa-magnifying-glass"></i><span>Search</span>
+        </a>
+      </div>
+      <div class="nav-section">
+        <span class="nav-section-label">Account</span>
+        <a href="/profile/" class="nav-link {% block nav_profile %}{% endblock %}">
+          <i class="fa-solid fa-circle-user"></i><span>Profile</span>
+        </a>
+        <a href="/users/" class="nav-link {% block nav_users %}{% endblock %}" id="navUsers" style="display:none">
+          <i class="fa-solid fa-users"></i><span>User Mgmt</span>
+        </a>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <div class="user-avatar" id="sidebarAvatar">U</div>
+        <div class="user-info">
+          <span class="user-name" id="sidebarUsername">Loading…</span>
+          <span class="user-role badge" id="sidebarRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn" id="logoutBtn">
+        <i class="fa-solid fa-right-from-bracket"></i><span>Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Main area ─────────────────────────────────────────── -->
+  <div class="main-wrapper">
+    <header class="topbar">
+      <button class="mobile-menu-btn" id="mobileMenuBtn">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div class="topbar-search">
+        <form action="/search/" method="get">
+          <div class="search-input-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" name="q" placeholder="Search documents…" autocomplete="off">
+          </div>
+        </form>
+      </div>
+      <div class="topbar-actions">
+        <a href="/documents/upload/" class="btn btn-primary btn-sm">
+          <i class="fa-solid fa-plus"></i> Upload
+        </a>
+        <div class="notification-bell"><i class="fa-regular fa-bell"></i></div>
+      </div>
+    </header>
+
+    <main class="page-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% endblock %}
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Confirm modal -->
+<div class="modal-overlay" id="confirmModal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="confirmTitle">Confirm</h3>
+      <button class="modal-close" id="confirmClose"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body"><p id="confirmMessage">Are you sure?</p></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="confirmCancel">Cancel</button>
+      <button class="btn btn-danger" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+{% load static %}
+<script src="{% static 'js/api.js' %}"></script>
+<script src="{% static 'js/app.js' %}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>
